@@ -1,0 +1,8 @@
+[submodule "external/drmu"]
+	path = external/drmu
+	url = https://github.com/slouken/drmu
+	branch = testffmpeg_rpi
+[submodule "external/hello_wayland"]
+	path = external/hello_wayland
+	url = https://github.com/slouken/hello_wayland
+	branch = testffmpeg_rpi
