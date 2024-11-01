@@ -37,6 +37,73 @@ static int video_height;
 static SDL_AudioStream *audio;
 static Uint64 video_start;
 static bool verbose;
+static bool enable_timing;
+
+#define GRAPH_WIDTH (overlay->w / 2)
+
+enum EFrameStage
+{
+    k_FrameStageStartDecode,
+    k_FrameStageStartUpdate,
+    k_FrameStageStartDisplay,
+    k_FrameStageComplete,
+    k_FrameStageCount,
+};
+
+class CGraphSample
+{
+public:
+    CGraphSample() { Reset(); }
+
+    void Reset() {
+        SDL_zero(m_timings);
+    }
+
+    bool BStarted() const {
+        return (m_timings[k_FrameStageStartDecode] != 0);
+    }
+
+    void MarkStage(EFrameStage eStage) {
+        m_timings[eStage] = SDL_GetTicksNS();
+    }
+
+    float GetFrameTimeMS() const {
+        return SDL_NS_TO_US(m_timings[k_FrameStageStartDecode]) / 1000.0f;
+    }
+
+    Uint64 GetStageTimestamp(EFrameStage eStage) const {
+        return m_timings[eStage];
+    }
+
+    float GetStageDuration(EFrameStage eStage) const {
+        return SDL_NS_TO_US(m_timings[eStage + 1] - m_timings[eStage]) / 1000.0f;
+    }
+
+    float GetDecodeDuration() const {
+        return GetStageDuration(k_FrameStageStartDecode);
+    }
+
+    float GetUpdateDuration() const {
+        return GetStageDuration(k_FrameStageStartUpdate);
+    }
+
+    float GetDisplayDuration() const {
+        return GetStageDuration(k_FrameStageStartDisplay);
+    }
+
+private:
+    Uint64 m_timings[k_FrameStageCount];
+};
+
+static float last_graph_x;
+static int graph_sample_index;
+static CGraphSample graph_samples[2];
+static CGraphSample stats;
+
+static Uint32 frame_time_count;
+static Uint64 frame_times[60];
+static double frame_pts[60];
+static Uint64 last_frame_time_update;
 
 #undef av_err2str
 static char av_error[512];
@@ -57,7 +124,7 @@ static SDL_Surface *CreateSprite(unsigned char *data, unsigned int len)
     return surface;
 }
 
-static void MoveSprite(void)
+static void MoveSprites()
 {
     SDL_Rect *position, *velocity;
     int i;
@@ -85,6 +152,194 @@ static void MoveSprite(void)
         position = &positions[i];
 
         SDL_BlitSurface(sprite, NULL, overlay, position);
+    }
+}
+
+static void DrawDebugText( float x, float y, const char *text )
+{
+    SDL_SetRenderDrawColor( renderer, 0, 0, 0, SDL_ALPHA_OPAQUE );
+    SDL_RenderDebugText( renderer, x + 1, y + 1, text );
+    SDL_SetRenderDrawColor( renderer, 255, 255, 255, SDL_ALPHA_OPAQUE );
+    SDL_RenderDebugText( renderer, x, y, text );
+}
+
+static void DrawGraphLegend()
+{
+    char line[12];
+    int nMS;
+    float flBaseY = (float)( overlay->h - 1 );
+    float flCurrentX = overlay->w - GRAPH_WIDTH - 1;
+    float flCurrentY;
+    for ( nMS = 10; nMS <= 100; nMS += 10 )
+    {
+        flCurrentY = flBaseY - nMS;
+        SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
+        SDL_RenderLine( renderer, ( flCurrentX - 4 ) + 1, ( flCurrentY + 1 ), ( flCurrentX + 1 ), ( flCurrentY + 1 ) );
+        SDL_SetRenderDrawColor( renderer, 255, 255, 255, 255 );
+        SDL_RenderLine( renderer, flCurrentX - 4, flCurrentY, flCurrentX, flCurrentY );
+        SDL_snprintf( line, sizeof(line), "%3d", nMS );
+        DrawDebugText( flCurrentX - ( 4 * SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE ), flCurrentY - ( SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE / 2 ), line );
+    }
+    flCurrentY = flBaseY - nMS;
+    DrawDebugText( flCurrentX - 3 * SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE, flCurrentY - ( SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE / 2 ),  "ms" );
+}
+
+static void DrawGraph()
+{
+    int iCurrIndex = graph_sample_index;
+    int iPrevIndex = ( iCurrIndex - 1 );
+    if ( iPrevIndex < 0 )
+    {
+        iPrevIndex += SDL_arraysize( graph_samples );
+    }
+
+    CGraphSample *pCurrSample = &graph_samples[ iCurrIndex ];
+    CGraphSample *pPrevSample = &graph_samples[ iPrevIndex ];
+
+    if ( !pCurrSample->BStarted() || !pPrevSample->BStarted() )
+    {
+        return;
+    }
+
+    const float FRAME_DATA_EXPIRE_SECONDS = 10.0f;
+    const float flGraphXIncrementPerMS = GRAPH_WIDTH / ( 1000.0f * FRAME_DATA_EXPIRE_SECONDS );
+    float flBaseY = (float)( overlay->h - 1 );
+    float flLastY;
+    float flLastX = last_graph_x;
+    float flCurrentY;
+    float flCurrentX = flLastX + ( pCurrSample->GetFrameTimeMS() - pPrevSample->GetFrameTimeMS() ) * flGraphXIncrementPerMS;
+
+    SDL_Rect viewport;
+    viewport.x = overlay->w - GRAPH_WIDTH;
+    viewport.y = 0;
+    viewport.w = GRAPH_WIDTH;
+    viewport.h = overlay->h;
+    SDL_SetRenderViewport( renderer, &viewport );
+
+    // Clear the texture to transparent
+    SDL_SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
+    SDL_SetRenderDrawColor( renderer, 0, 0, 0, 0 );
+    SDL_FRect ClearRect;
+    ClearRect.x = flLastX + 1;
+    ClearRect.y = 0.0f;
+    ClearRect.w = ceilf( flCurrentX - flLastX ) + 1;
+    ClearRect.h = (float)overlay->h;
+    SDL_RenderFillRect( renderer, &ClearRect );
+    if ( ( ClearRect.x + ClearRect.w ) >= GRAPH_WIDTH )
+    {
+        ClearRect.x -= GRAPH_WIDTH;
+        SDL_RenderFillRect( renderer, &ClearRect );
+    }
+
+    // Draw a cursor
+    float flCursorX = SDL_roundf( flCurrentX + 1 );
+    while ( flCursorX >= GRAPH_WIDTH )
+    {
+        flCursorX -= GRAPH_WIDTH;
+    }
+    SDL_SetRenderDrawColor( renderer, 255, 255, 255, 255 );
+    SDL_RenderLine( renderer, flCursorX, 142.0f, flCursorX, (float)( overlay->h - 1 ) );
+
+    // Draw the frame decode time (yellow)
+    float flLastMS = pPrevSample->GetDecodeDuration();
+    float flCurrentMS = pCurrSample->GetDecodeDuration();
+    flLastY = SDL_max( flBaseY - flLastMS, 0.0f );
+    flCurrentY = SDL_max( flBaseY - flCurrentMS, 0.0f );
+    SDL_SetRenderDrawColor( renderer, 0xCF, 0xCF, 0x56, 255 );
+    SDL_RenderLine( renderer, flLastX, flLastY, flCurrentX, flCurrentY );
+    if ( flCurrentX >= GRAPH_WIDTH )
+        SDL_RenderLine( renderer, flLastX - GRAPH_WIDTH, flLastY, flCurrentX - GRAPH_WIDTH, flCurrentY );
+
+    // Draw the frame update time (blue)
+    flLastMS += pPrevSample->GetUpdateDuration();
+    flCurrentMS += pCurrSample->GetUpdateDuration();
+    flLastY = SDL_max( flBaseY - flLastMS, 0.0f );
+    flCurrentY = SDL_max( flBaseY - flCurrentMS, 0.0f );
+    SDL_SetRenderDrawColor( renderer, 0x4C, 0x94, 0xFF, 255 );
+    SDL_RenderLine( renderer, flLastX, flLastY, flCurrentX, flCurrentY );
+    if ( flCurrentX >= GRAPH_WIDTH )
+        SDL_RenderLine( renderer, flLastX - GRAPH_WIDTH, flLastY, flCurrentX - GRAPH_WIDTH, flCurrentY );
+
+    // Draw the frame display time (red)
+    flLastMS += pPrevSample->GetDisplayDuration();
+    flCurrentMS += pCurrSample->GetDisplayDuration();
+    flLastY = SDL_max( flBaseY - flLastMS, 0.0f );
+    flCurrentY = SDL_max( flBaseY - flCurrentMS, 0.0f );
+    SDL_SetRenderDrawColor( renderer, 0xEF, 0x4F, 0x42, 255 );
+    SDL_RenderLine( renderer, flLastX, flLastY, flCurrentX, flCurrentY );
+    if ( flCurrentX >= GRAPH_WIDTH )
+        SDL_RenderLine( renderer, flLastX - GRAPH_WIDTH, flLastY, flCurrentX - GRAPH_WIDTH, flCurrentY );
+
+    last_graph_x = flCurrentX;
+    while ( last_graph_x >= (float)GRAPH_WIDTH )
+    {
+        last_graph_x -= GRAPH_WIDTH;
+    }
+
+    SDL_SetRenderViewport( renderer, NULL );
+}
+
+static void DrawTimings()
+{
+    if (frame_time_count < SDL_arraysize(frame_times)) {
+        return;
+    }
+
+    const Uint64 FRAME_TIME_UPDATE_INTERVAL_MS = 250;
+    Uint64 now = SDL_GetTicks();
+    if ((now - last_frame_time_update) < FRAME_TIME_UPDATE_INTERVAL_MS) {
+        return;
+    }
+    last_frame_time_update = now;
+
+    const float flLineSkip = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 4.0f;
+    SDL_FRect rect;
+    rect.w = 20 * SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE;
+    rect.h = 3 * flLineSkip;
+    rect.x = ( overlay->w - GRAPH_WIDTH ) - rect.w - 3 * SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE - 4.0f;
+    rect.y = overlay->h - rect.h - 4.0f;
+    SDL_SetRenderDrawColor( renderer, 0, 0, 0, 0 );
+    SDL_RenderFillRect( renderer, &rect );
+
+    char line[128];
+    float flCurrentX = rect.x;
+    float flCurrentY = rect.y;
+
+    Uint32 first = (frame_time_count % SDL_arraysize(frame_times));
+    Uint32 last = ((frame_time_count + SDL_arraysize(frame_times) - 1) % SDL_arraysize(frame_times));
+
+    Uint32 frame_count = SDL_arraysize(frame_times);
+    Uint64 first_time = frame_times[first];
+    Uint64 last_time = frame_times[last];
+    float flAverageFPS = ( frame_count - 1 ) / ( SDL_NS_TO_MS(last_time - first_time) / 1000.0f );
+    SDL_snprintf( line, sizeof(line), "Average FPS: %.2f", flAverageFPS );
+    DrawDebugText( flCurrentX, flCurrentY, line );
+    flCurrentY += flLineSkip;
+
+    double first_pts = frame_pts[first];
+    double last_pts = frame_pts[last];
+    float flDesiredFPS = 0.0f;
+    if (last_pts > first_pts) {
+        flDesiredFPS = ( frame_count - 1 )/ ( last_pts - first_pts );
+    }
+    SDL_snprintf( line, sizeof(line), "Desired FPS: %.2f", flDesiredFPS );
+    DrawDebugText( flCurrentX, flCurrentY, line );
+    flCurrentY += flLineSkip;
+
+    float flAverageInterval = ( SDL_NS_TO_US(last_time - first_time) / 1000.0f ) / ( frame_count - 1 );
+    SDL_snprintf( line, sizeof(line), "Frame time: %.2fms", flAverageInterval );
+    DrawDebugText( flCurrentX, flCurrentY, line );
+    flCurrentY += flLineSkip;
+}
+
+static void UpdateOverlay()
+{
+    if (enable_timing) {
+        DrawTimings();
+        DrawGraph();
+        SDL_FlushRenderer( renderer );
+    } else {
+        MoveSprites();
     }
 
     display->UpdateOverlay();
@@ -164,20 +419,39 @@ static void HandleVideoFrame(AVFrame *frame, double pts)
         UpdateVideoRect();
     }
 
+    stats.MarkStage(k_FrameStageStartUpdate);
+
     display->UpdateVideo(frame);
 
-    MoveSprite();
+    UpdateOverlay();
 
-    /* Quick and dirty PTS handling */
-    if (!video_start) {
-        video_start = SDL_GetTicks();
+    if (!enable_timing) {
+        /* Quick and dirty PTS handling */
+        if (!video_start) {
+            video_start = SDL_GetTicks();
+        }
+        double now = (double)(SDL_GetTicks() - video_start) / 1000.0;
+        if (now < pts) {
+            SDL_DelayPrecise((Uint64)((pts - now) * SDL_NS_PER_SECOND));
+        }
     }
-    double now = (double)(SDL_GetTicks() - video_start) / 1000.0;
-    if (now < pts) {
-        SDL_DelayPrecise((Uint64)((pts - now) * SDL_NS_PER_SECOND));
-    }
+
+    stats.MarkStage(k_FrameStageStartDisplay);
 
     display->DisplayFrame();
+
+    stats.MarkStage(k_FrameStageComplete);
+
+    if (enable_timing) {
+        int index = (frame_time_count % SDL_arraysize(frame_times));
+        frame_times[index] = stats.GetStageTimestamp(k_FrameStageComplete);
+        frame_pts[index] = pts;
+        ++frame_time_count;
+
+        graph_sample_index = (graph_sample_index + 1) % SDL_arraysize(graph_samples);
+        graph_samples[graph_sample_index] = stats;
+        stats.Reset();
+    }
 }
 
 static AVCodecContext *OpenAudioStream(AVFormatContext *ic, int stream, const AVCodec *codec)
@@ -335,7 +609,7 @@ static void av_log_callback(void *avcl, int level, const char *fmt, va_list vl)
 
 static void print_usage(const char *argv0)
 {
-    SDL_Log("Usage: %s [--verbose] [--video wayland|x11|kmsdrm] [--fullscreen] video_file\n", argv0);
+    SDL_Log("Usage: %s [--verbose] [--enable-timing] [--video wayland|x11|kmsdrm] [--fullscreen] video_file\n", argv0);
 }
 
 
@@ -371,6 +645,9 @@ int main(int argc, char *argv[])
 
         if (SDL_strcmp(argv[i], "--verbose") == 0) {
             verbose = true;
+            consumed = 1;
+        } else if (SDL_strcmp(argv[i], "--enable-timing") == 0) {
+            enable_timing = true;
             consumed = 1;
         } else if (SDL_strcmp(argv[i], "--video") == 0 && argv[i + 1]) {
             SDL_SetHint(SDL_HINT_VIDEO_DRIVER, argv[i + 1]);
@@ -436,6 +713,7 @@ int main(int argc, char *argv[])
         return_code = 3;
         goto quit;
     }
+    DrawGraphLegend();
 
     /* Open the media file */
     result = avformat_open_input(&ic, file, NULL, NULL);
@@ -452,12 +730,14 @@ int main(int argc, char *argv[])
             goto quit;
         }
     }
-    audio_stream = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, video_stream, &audio_codec, 0);
-    if (audio_stream >= 0) {
-        audio_context = OpenAudioStream(ic, audio_stream, audio_codec);
-        if (!audio_context) {
-            return_code = 4;
-            goto quit;
+    if (!enable_timing) {
+        audio_stream = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, video_stream, &audio_codec, 0);
+        if (audio_stream >= 0) {
+            audio_context = OpenAudioStream(ic, audio_stream, audio_codec);
+            if (!audio_context) {
+                return_code = 4;
+                goto quit;
+            }
         }
     }
     pkt = av_packet_alloc();
@@ -546,6 +826,9 @@ int main(int argc, char *argv[])
                         SDL_Log("avcodec_send_packet(audio_context) failed: %s", av_err2str(result));
                     }
                 } else if (pkt->stream_index == video_stream) {
+                    if (!stats.BStarted()) {
+                        stats.MarkStage(k_FrameStageStartDecode);
+                    }
                     result = avcodec_send_packet(video_context, pkt);
                     if (result < 0) {
                         SDL_Log("avcodec_send_packet(video_context) failed: %s", av_err2str(result));
@@ -598,6 +881,7 @@ quit:
     avcodec_free_context(&audio_context);
     avcodec_free_context(&video_context);
     avformat_close_input(&ic);
+    SDL_DestroyRenderer(renderer);
     if (display) {
         delete display;
     }
