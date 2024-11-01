@@ -142,6 +142,16 @@ bool CVideoDisplayEGL::BInitCodec( AVCodecContext *pContext, const AVCodec *pCod
 		return false;
 	}
 
+	if ( pCodec->id == AV_CODEC_ID_H264 )
+	{
+		// See if hardware decoding is available
+		const AVCodec *pV4L2Codec = avcodec_find_decoder_by_name( "h264_v4l2m2m" );
+		if ( pV4L2Codec )
+		{
+			pCodec = pV4L2Codec;
+		}
+	}
+
 	bool bAccelerated = false;
 	int iHWConfig = 0;
 	const AVCodecHWConfig *pHWConfig;
