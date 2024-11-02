@@ -10,12 +10,22 @@
   freely.
 */
 #include "video_display.h"
+#include "video_display_drm.h"
 #include "video_display_egl.h"
 
 
 CVideoDisplay *CreateVideoDisplay( SDL_Window *pWindow )
 {
-	CVideoDisplay *pDisplay = new CVideoDisplayEGL;
+	CVideoDisplay *pDisplay;
+
+	if ( SDL_strcmp( SDL_GetCurrentVideoDriver(), "kmsdrm" ) == 0 )
+	{
+		pDisplay = new CVideoDisplayDRM;
+	}
+	else
+	{
+		pDisplay = new CVideoDisplayEGL;
+	}
 
 	if ( !pDisplay->BInit( pWindow ) )
 	{
