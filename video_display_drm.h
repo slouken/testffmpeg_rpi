@@ -55,7 +55,7 @@ private:
 	drmprime_video_env_t *m_pVideoOut = nullptr;
 	drmu_plane_t *m_pOverlayPlane = nullptr;
 	drmu_dmabuf_env_t *m_pOverlayDMABufEnv = nullptr;
-	drmu_fb_t *m_arrOverlayFB[2] = { nullptr, nullptr };
+	drmu_fb_t *m_pOverlayFB = nullptr;
 	int m_iOverlayFB = 0;
 	SDL_Surface *m_pOverlaySurface = nullptr;
 	drmu_rect_t m_OverlayRect = { 0, 0, 0, 0 };

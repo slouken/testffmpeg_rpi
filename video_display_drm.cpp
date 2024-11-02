@@ -56,10 +56,7 @@ CVideoDisplayDRM::~CVideoDisplayDRM()
 			drmu_atomic_plane_clear_add( pAtomic, m_pOverlayPlane );
 			drmu_atomic_queue( &pAtomic);
 
-			for ( int iIndex = 0; iIndex < SDL_arraysize( m_arrOverlayFB ); ++iIndex )
-			{
-				drmu_fb_unref( &m_arrOverlayFB[ iIndex ] );
-			}
+			drmu_fb_unref( &m_pOverlayFB );
 			drmu_dmabuf_env_unref( &m_pOverlayDMABufEnv );
 			drmu_plane_unref( &m_pOverlayPlane );
 		}
@@ -114,22 +111,18 @@ SDL_Surface *CVideoDisplayDRM::InitOverlay( int nWidth, int nHeight )
 	}
 
 	m_pOverlayDMABufEnv = drmu_dmabuf_env_new_video( pOutputEnv );
-
-	for ( int iIndex = 0; iIndex < SDL_arraysize( m_arrOverlayFB ); ++iIndex )
+	if ( m_pOverlayDMABufEnv )
 	{
-		if ( m_pOverlayDMABufEnv )
-		{
-			m_arrOverlayFB[ iIndex ] = drmu_fb_new_dmabuf_mod( m_pOverlayDMABufEnv, nWidth, nHeight, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
-		}
-		else
-		{
-			m_arrOverlayFB[ iIndex ] = drmu_fb_new_dumb_mod( pOutputEnv, nWidth, nHeight, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
-		}
-		if ( !m_arrOverlayFB[ iIndex ] )
-		{
-			SDL_SetError( "Couldn't create overlay framebuffer" );
-			return nullptr;
-		}
+		m_pOverlayFB = drmu_fb_new_dmabuf_mod( m_pOverlayDMABufEnv, nWidth, nHeight, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
+	}
+	else
+	{
+		m_pOverlayFB = drmu_fb_new_dumb_mod( pOutputEnv, nWidth, nHeight, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
+	}
+	if ( !m_pOverlayFB )
+	{
+		SDL_SetError( "Couldn't create overlay framebuffer" );
+		return nullptr;
 	}
 
 	m_pOverlaySurface = SDL_CreateSurface( nWidth, nHeight, SDL_PIXELFORMAT_ARGB8888 );
@@ -146,10 +139,24 @@ SDL_Surface *CVideoDisplayDRM::InitOverlay( int nWidth, int nHeight )
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayDRM::SetOverlayRect( const SDL_Rect &rect )
 {
+	if (rect.x == m_OverlayRect.x &&
+	    rect.y == m_OverlayRect.y &&
+	    rect.w == (int)m_OverlayRect.w &&
+	    rect.h == (int)m_OverlayRect.h) {
+		return;
+	}
+
 	m_OverlayRect.x = rect.x;
 	m_OverlayRect.y = rect.y;
 	m_OverlayRect.w = (uint32_t)rect.w;
 	m_OverlayRect.h = (uint32_t)rect.h;
+
+	drmu_output_t *pOutput = drmprime_out_drmu_output( m_pDisplayOut );
+	drmu_env_t *pOutputEnv = drmu_output_env( pOutput );
+	drmu_atomic_t *pAtomic = drmu_atomic_new( pOutputEnv );
+	drmu_atomic_plane_clear_add( pAtomic, m_pOverlayPlane );
+	drmu_atomic_plane_add_fb( pAtomic, m_pOverlayPlane, m_pOverlayFB, m_OverlayRect );
+	drmu_atomic_queue( &pAtomic);
 }
 
 
@@ -158,14 +165,11 @@ void CVideoDisplayDRM::SetOverlayRect( const SDL_Rect &rect )
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayDRM::UpdateOverlay()
 {
-	m_iOverlayFB = ( m_iOverlayFB + 1 ) % SDL_arraysize( m_arrOverlayFB );
-
-	drmu_fb_t *pFB = m_arrOverlayFB[ m_iOverlayFB ];
-	drmu_fb_write_start( pFB );
+	drmu_fb_write_start( m_pOverlayFB );
 	const uint8_t *pSrc = (uint8_t *)m_pOverlaySurface->pixels;
 	int nSrcPitch = m_pOverlaySurface->pitch;
-	uint8_t *pDst = (uint8_t *)drmu_fb_data( pFB, 0 );
-	int nDstPitch = drmu_fb_pitch( pFB, 0 );
+	uint8_t *pDst = (uint8_t *)drmu_fb_data( m_pOverlayFB, 0 );
+	int nDstPitch = drmu_fb_pitch( m_pOverlayFB, 0 );
 	if ( nSrcPitch == nDstPitch )
 	{
 		memcpy( pDst, pSrc, m_pOverlaySurface->h * nSrcPitch );
@@ -180,14 +184,7 @@ void CVideoDisplayDRM::UpdateOverlay()
 			pDst += nDstPitch;
 		}
 	}
-	drmu_fb_write_end( pFB );
-
-	drmu_output_t *pOutput = drmprime_out_drmu_output( m_pDisplayOut );
-	drmu_env_t *pOutputEnv = drmu_output_env( pOutput );
-	drmu_atomic_t *pAtomic = drmu_atomic_new( pOutputEnv );
-	drmu_atomic_plane_clear_add( pAtomic, m_pOverlayPlane );
-	drmu_atomic_plane_add_fb( pAtomic, m_pOverlayPlane, pFB, m_OverlayRect );
-	drmu_atomic_queue( &pAtomic);
+	drmu_fb_write_end( m_pOverlayFB );
 }
 
 
