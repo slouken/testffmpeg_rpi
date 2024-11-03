@@ -40,20 +40,10 @@ static AVPixelFormat get_drm_format( AVCodecContext *ctx, const AVPixelFormat *p
 
 
 //--------------------------------------------------------------------------------------------------
-// Initialize the video codec
+// Initialize a codec context on Raspberry Pi
 //--------------------------------------------------------------------------------------------------
-bool BInitCodec( AVCodecContext *pContext, const AVCodec *pCodec, int (*get_buffer2)( AVCodecContext *s, AVFrame *frame, int flags ), void *pOpaque )
+static bool BInitCodecInternal( AVCodecContext *pContext, const AVCodec *pCodec, int (*get_buffer2)( AVCodecContext *s, AVFrame *frame, int flags ), void *pOpaque )
 {
-	if ( pCodec->id == AV_CODEC_ID_H264 )
-	{
-		// See if hardware decoding is available
-		const AVCodec *pV4L2Codec = avcodec_find_decoder_by_name( "h264_v4l2m2m" );
-		if ( pV4L2Codec )
-		{
-			pCodec = pV4L2Codec;
-		}
-	}
-
 	bool bAccelerated = false;
 	int iHWConfig = 0;
 	const AVCodecHWConfig *pHWConfig;
@@ -70,7 +60,7 @@ bool BInitCodec( AVCodecContext *pContext, const AVCodec *pCodec, int (*get_buff
 	{
 		pContext->get_format = get_drm_format;
 
-		if ( av_hwdevice_ctx_create( &pContext->hw_device_ctx, AV_HWDEVICE_TYPE_DRM, NULL, NULL, 0 ) < 0 )
+		if ( av_hwdevice_ctx_create( &pContext->hw_device_ctx, AV_HWDEVICE_TYPE_DRM, nullptr, nullptr, 0 ) < 0 )
 		{
 			SDL_SetError( "av_hwdevice_ctx_create() failed" );
 			return false;
@@ -100,5 +90,50 @@ bool BInitCodec( AVCodecContext *pContext, const AVCodec *pCodec, int (*get_buff
 	}
 
 	return true;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+// Check for hardware accelerated H.264
+//--------------------------------------------------------------------------------------------------
+const AVCodec *GetV4L2H264Codec()
+{
+	const AVCodec *pCodec = avcodec_find_decoder_by_name( "h264_v4l2m2m" );
+	if ( !pCodec )
+	{
+		return nullptr;
+	}
+
+	AVCodecContext *pContext = avcodec_alloc_context3( nullptr );
+	if ( !pContext )
+	{
+		SDL_Log("avcodec_alloc_context3 failed");
+		return nullptr;
+	}
+
+	bool bAvailable = BInitCodecInternal( pContext, pCodec, nullptr, nullptr );
+	avcodec_free_context( &pContext );
+	if ( !bAvailable )
+	{
+		return nullptr;
+	}
+	return pCodec;
+}
+
+//--------------------------------------------------------------------------------------------------
+// Initialize the video codec
+//--------------------------------------------------------------------------------------------------
+bool BInitCodec( AVCodecContext *pContext, const AVCodec *pCodec, int (*get_buffer2)( AVCodecContext *s, AVFrame *frame, int flags ), void *pOpaque )
+{
+	if ( pCodec->id == AV_CODEC_ID_H264 )
+	{
+		// See if hardware decoding is available
+		const AVCodec *pV4L2Codec = GetV4L2H264Codec();
+		if ( pV4L2Codec )
+		{
+			return BInitCodecInternal( pContext, pV4L2Codec, get_buffer2, pOpaque );
+		}
+	}
+	return BInitCodecInternal( pContext, pCodec, get_buffer2, pOpaque );
 }
 
