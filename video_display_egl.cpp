@@ -82,13 +82,13 @@ bool CVideoDisplayEGL::BInit( SDL_Window *pWindow )
 //--------------------------------------------------------------------------------------------------
 SDL_Surface *CVideoDisplayEGL::InitOverlay( int nWidth, int nHeight )
 {
-	m_pOverlayTexture = SDL_CreateTexture( m_pRenderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, nWidth, nHeight );
+	m_pOverlayTexture = SDL_CreateTexture( m_pRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, nWidth, nHeight );
 	if ( !m_pOverlayTexture )
 	{
 		return nullptr;
 	}
 
-	m_pOverlaySurface = SDL_CreateSurface( nWidth, nHeight, SDL_PIXELFORMAT_RGBA32 );
+	m_pOverlaySurface = SDL_CreateSurface( nWidth, nHeight, SDL_PIXELFORMAT_ARGB8888 );
 	if ( !m_pOverlaySurface )
 	{
 		return nullptr;
