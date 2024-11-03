@@ -12,6 +12,7 @@
 #include "video_display.h"
 #include "video_display_drm.h"
 #include "video_display_egl.h"
+#include "video_display_wayland.h"
 
 
 CVideoDisplay *CreateVideoDisplay( SDL_Window *pWindow )
@@ -21,6 +22,10 @@ CVideoDisplay *CreateVideoDisplay( SDL_Window *pWindow )
 	if ( SDL_strcmp( SDL_GetCurrentVideoDriver(), "kmsdrm" ) == 0 )
 	{
 		pDisplay = new CVideoDisplayDRM;
+	}
+	else if ( SDL_strcmp( SDL_GetCurrentVideoDriver(), "wayland" ) == 0 )
+	{
+		pDisplay = new CVideoDisplayWayland;
 	}
 	else
 	{

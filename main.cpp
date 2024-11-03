@@ -629,7 +629,7 @@ int main(int argc, char *argv[])
     int i;
     int result;
     int return_code = -1;
-    SDL_WindowFlags window_flags = (SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+    SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE;
     int window_width = 1280;
     int window_height = 720;
     bool flushing = false;
@@ -638,6 +638,9 @@ int main(int argc, char *argv[])
 
     /* Log ffmpeg messages */
     av_log_set_callback(av_log_callback);
+
+    /* Default to Wayland, if available */
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "wayland,x11,kmsdrm");
 
     /* Parse commandline */
     for (i = 1; i < argc;) {
@@ -785,9 +788,6 @@ int main(int argc, char *argv[])
             velocities[i].y = (SDL_rand(2 + 1) - 1);
         }
     }
-
-    /* We're ready to go! */
-    SDL_ShowWindow(window);
 
     /* Main render loop */
     while (!done) {

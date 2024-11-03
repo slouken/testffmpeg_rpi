@@ -1,6 +1,6 @@
 
 TARGET := testffmpeg_rpi
-SOURCES := main.cpp video_display.cpp video_display_rpi.cpp video_display_egl.cpp video_display_drm.cpp \
+SOURCES := main.cpp video_display.cpp video_display_rpi.cpp video_display_egl.cpp video_display_drm.cpp video_display_wayland.cpp \
 			external/hello_wayland/init_window.c \
 			external/hello_wayland/dmabuf_alloc.c \
 			external/hello_wayland/dmabuf_pool.c \
