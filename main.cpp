@@ -727,10 +727,18 @@ int main(int argc, char *argv[])
     }
     video_stream = av_find_best_stream(ic, AVMEDIA_TYPE_VIDEO, -1, -1, &video_codec, 0);
     if (video_stream >= 0) {
-        video_context = OpenVideoStream(ic, video_stream, video_codec);
+        if (video_codec->id == AV_CODEC_ID_H264) {
+            const AVCodec *v4l2_codec = avcodec_find_decoder_by_name("h264_v4l2m2m");
+            if (v4l2_codec) {
+                video_context = OpenVideoStream(ic, video_stream, v4l2_codec);
+            }
+        }
         if (!video_context) {
-            return_code = 4;
-            goto quit;
+            video_context = OpenVideoStream(ic, video_stream, video_codec);
+            if (!video_context) {
+                return_code = 4;
+                goto quit;
+            }
         }
     }
     if (!enable_timing) {
