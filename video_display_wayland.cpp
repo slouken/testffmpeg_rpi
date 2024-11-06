@@ -161,7 +161,6 @@ void CVideoDisplayWayland::SetOverlayRect( const SDL_Rect &rect )
 	}
 	else
 	{
-printf("attached at %d,%d %dx%d\n", m_OverlayRect.x, m_OverlayRect.y, m_OverlayRect.w, m_OverlayRect.h);
 		wo_surface_attach_fb( m_pOverlayWaylandSurface, m_pOverlayFB, m_OverlayRect );
 		m_bOverlayAttached = true;
 	}
@@ -173,12 +172,6 @@ printf("attached at %d,%d %dx%d\n", m_OverlayRect.x, m_OverlayRect.y, m_OverlayR
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayWayland::UpdateOverlay()
 {
-#define VERIFY_OVERLAY
-#ifdef VERIFY_OVERLAY
-static int i; ++i;
-SDL_Rect rect = { 1, 1, 1, 1 };
-SDL_FillSurfaceRect(m_pOverlaySurface, &rect, SDL_MapSurfaceRGBA(m_pOverlaySurface, i, 0, 0, 128));
-#endif
 	wo_fb_write_start( m_pOverlayFB );
 	const uint8_t *pSrc = (uint8_t *)m_pOverlaySurface->pixels;
 	int nSrcPitch = m_pOverlaySurface->pitch;
