@@ -24,10 +24,20 @@ extern "C" {
 class CVideoDisplay
 {
 public:
+	enum EDisplayType
+	{
+		k_EDisplayTypeDRM,
+		k_EDisplayTypeEGL,
+		k_EDisplayTypeWayland
+	};
+
+public:
 	CVideoDisplay() { }
 	virtual ~CVideoDisplay() { }
 
 	virtual bool BInit( SDL_Window *pWindow ) = 0;
+
+	virtual EDisplayType GetDisplayType() = 0;
 
 	virtual SDL_Surface *InitOverlay( int nWidth, int nHeight ) = 0;
 	virtual void SetOverlayRect( const SDL_Rect &rect ) = 0;

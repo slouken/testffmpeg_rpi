@@ -40,6 +40,8 @@ public:
 
 	virtual bool BInit( SDL_Window *pWindow ) override;
 
+	virtual EDisplayType GetDisplayType() override { return k_EDisplayTypeDRM; }
+
 	virtual SDL_Surface *InitOverlay( int nWidth, int nHeight ) override;
 	virtual void SetOverlayRect( const SDL_Rect &rect ) override;
 	virtual void UpdateOverlay() override;
