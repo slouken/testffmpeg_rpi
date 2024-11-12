@@ -150,7 +150,6 @@ void CVideoDisplayEGL::UpdateVideo( AVFrame *pFrame )
 	EGLint attribs[50];
 	EGLint *a = attribs;
 	int i, j;
-	GLuint texture;
 	EGLImage image;
 
 	static const EGLint anames[] = {
@@ -202,7 +201,7 @@ void CVideoDisplayEGL::UpdateVideo( AVFrame *pFrame )
 	*a = EGL_NONE;
 
 	if ( !( image = eglCreateImageKHR( pDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs ) ) ) {
-		SDL_SetError( "Failed to import fd %d", desc->objects[0].fd );
+		SDL_Log( "Failed to import fd %d", desc->objects[0].fd );
 		return;
 	}
 
@@ -213,7 +212,6 @@ void CVideoDisplayEGL::UpdateVideo( AVFrame *pFrame )
 	// A fence is set on the fd by the egl render - we can reuse the buffer once it goes away
 	// ( same as the direct wayland output after buffer release )
 	add_frame_fence( m_pVideoOut, pFrame );
-
 }
 
 
