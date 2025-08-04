@@ -6,3 +6,7 @@
 	path = external/hello_wayland
 	url = https://github.com/slouken/hello_wayland
 	branch = testffmpeg_rpi
+[submodule "external/pollqueue"]
+	path = external/pollqueue
+	url = https://github.com/slouken/pollqueue.git
+	branch = testffmpeg_rpi
