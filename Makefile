@@ -7,10 +7,10 @@ SOURCES := main.cpp video_display.cpp video_display_rpi.cpp video_display_egl.cp
 			external/hello_wayland/fb_pool.c \
 			external/hello_wayland/generic_pool.c \
 			external/hello_wayland/init_window.c \
-			external/hello_wayland/pollqueue.c \
 			external/hello_wayland/wayout.c \
 			external/hello_wayland/build/fullscreen-shell-unstable-v1-protocol.c \
 			external/hello_wayland/build/linux-dmabuf-unstable-v1-protocol.c \
+			external/hello_wayland/build/presentation-time-protocol.c \
 			external/hello_wayland/build/single-pixel-buffer-v1-client-protocol.c \
 			external/hello_wayland/build/viewporter-protocol.c \
 			external/hello_wayland/build/xdg-decoration-unstable-v1-protocol.c \
@@ -25,10 +25,11 @@ SOURCES := main.cpp video_display.cpp video_display_rpi.cpp video_display_egl.cp
 			external/drmu/drmu/drmu_output.c \
 			external/drmu/drmu/drmu_poll.c \
 			external/drmu/drmu/drmu_pool.c \
-			external/drmu/drmu/drmu_util.c
+			external/drmu/drmu/drmu_util.c \
+			external/pollqueue/pollqueue.c
 OBJECTS := ${SOURCES:.c=.o}
 OBJECTS := ${OBJECTS:.cpp=.o}
-CFLAGS := -g -I. -Iexternal/hello_wayland/build -Iexternal/drmu -Iexternal/drmu/drmu -Iexternal/drmu/pollqueue -I/usr/include/libdrm
+CFLAGS := -g -I. -Iexternal/hello_wayland/build -Iexternal/drmu -Iexternal/drmu/drmu -Iexternal/pollqueue -I/usr/include/libdrm
 CXXFLAGS := $(CFLAGS)
 LIBS := -lSDL3 -lavcodec -lavformat -lavutil -lwayland-client -lwayland-egl -lepoxy -lEGL -ldrm -lgbm
 
