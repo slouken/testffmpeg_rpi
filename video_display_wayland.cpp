@@ -32,8 +32,14 @@ CVideoDisplayWayland::~CVideoDisplayWayland()
 {
 	SDL_RemoveEventWatch( EventWatch, this );
 
-	wo_fb_unref( &m_pOverlayFB );
+	if ( m_pLastFB )
+	{
+		wo_surface_detach_fb( m_pOverlayWaylandSurface );
+		wo_surface_commit( m_pOverlayWaylandSurface );
+		wo_fb_unref( &m_pLastFB );
+	}
 	wo_surface_unref( &m_pOverlayWaylandSurface );
+	fb_pool_kill( &m_pFramebufferPool );
 	if ( m_pOverlaySurface )
 	{
 		SDL_DestroySurface( m_pOverlaySurface );
@@ -122,10 +128,10 @@ SDL_Surface *CVideoDisplayWayland::InitOverlay( int nWidth, int nHeight )
 		return nullptr;
 	}
 
-	m_pOverlayFB = wo_make_fb( pWindowEnv, nWidth, nHeight, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
-	if ( !m_pOverlayFB )
+	m_pFramebufferPool = fb_pool_new_fbs( pWindowEnv, 4 );
+	if ( !m_pFramebufferPool )
 	{
-		SDL_SetError( "Couldn't create overlay framebuffer" );
+		SDL_SetError( "Couldn't create framebuffer pool" );
 		return nullptr;
 	}
 
@@ -143,27 +149,10 @@ SDL_Surface *CVideoDisplayWayland::InitOverlay( int nWidth, int nHeight )
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayWayland::SetOverlayRect( const SDL_Rect &rect )
 {
-	if (rect.x == m_OverlayRect.x &&
-	    rect.y == m_OverlayRect.y &&
-	    rect.w == (int)m_OverlayRect.w &&
-	    rect.h == (int)m_OverlayRect.h) {
-		return;
-	}
-
 	m_OverlayRect.x = rect.x;
 	m_OverlayRect.y = rect.y;
 	m_OverlayRect.w = (uint32_t)rect.w;
 	m_OverlayRect.h = (uint32_t)rect.h;
-
-	if ( m_bOverlayAttached )
-	{
-		wo_surface_dst_pos_set( m_pOverlayWaylandSurface, m_OverlayRect );
-	}
-	else
-	{
-		wo_surface_attach_fb( m_pOverlayWaylandSurface, m_pOverlayFB, m_OverlayRect );
-		m_bOverlayAttached = true;
-	}
 }
 
 
@@ -172,11 +161,18 @@ void CVideoDisplayWayland::SetOverlayRect( const SDL_Rect &rect )
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayWayland::UpdateOverlay()
 {
-	wo_fb_write_start( m_pOverlayFB );
+	wo_fb_t *pFB = fb_pool_fb_new( m_pFramebufferPool, m_pOverlaySurface->w, m_pOverlaySurface->h, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
+	if ( !pFB )
+	{
+		SDL_SetError( "Couldn't create overlay framebuffer" );
+		return;
+	}
+
+	wo_fb_write_start( pFB );
 	const uint8_t *pSrc = (uint8_t *)m_pOverlaySurface->pixels;
 	int nSrcPitch = m_pOverlaySurface->pitch;
-	uint8_t *pDst = (uint8_t *)wo_fb_data( m_pOverlayFB, 0 );
-	int nDstPitch = (int)wo_fb_pitch( m_pOverlayFB, 0 );
+	uint8_t *pDst = (uint8_t *)wo_fb_data( pFB, 0 );
+	int nDstPitch = (int)wo_fb_pitch( pFB, 0 );
 	if ( nSrcPitch == nDstPitch )
 	{
 		memcpy( pDst, pSrc, m_pOverlaySurface->h * nSrcPitch );
@@ -191,7 +187,13 @@ void CVideoDisplayWayland::UpdateOverlay()
 			pDst += nDstPitch;
 		}
 	}
-	wo_fb_write_end( m_pOverlayFB );
+	wo_fb_write_end( pFB );
+
+	wo_fb_unref( &m_pLastFB );
+	m_pLastFB = pFB;
+
+	wo_surface_attach_fb( m_pOverlayWaylandSurface, pFB, m_OverlayRect );
+	wo_surface_commit( m_pOverlayWaylandSurface );
 }
 
 

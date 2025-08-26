@@ -16,6 +16,7 @@
 
 extern "C" {
 #include "external/hello_wayland/init_window.h"
+#include "external/hello_wayland/fb_pool.h"
 }
 
 
@@ -48,8 +49,8 @@ private:
 	SDL_WindowID m_unWindowID = 0;
 	vid_out_env_t *m_pVideoOut = nullptr;
 	wo_surface_t *m_pOverlayWaylandSurface = nullptr;
-	wo_fb_t *m_pOverlayFB = nullptr;
-	bool m_bOverlayAttached = false;
+	fb_pool_t *m_pFramebufferPool = nullptr;
+	wo_fb_t *m_pLastFB = nullptr;
 	SDL_Surface *m_pOverlaySurface;
 	wo_rect_t m_OverlayRect = { 0, 0, 0, 0 };
 };
