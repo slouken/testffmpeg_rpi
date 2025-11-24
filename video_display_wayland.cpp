@@ -211,6 +211,12 @@ bool CVideoDisplayWayland::BInitCodec( AVCodecContext *pContext, const AVCodec *
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayWayland::UpdateVideo( AVFrame *pFrame )
 {
+	if ( vidout_wayland_in_flight( m_pVideoOut ) > 2 )
+	{
+		// Too many frames queued, drop it
+		return;
+	}
+
 	vidout_wayland_display( m_pVideoOut, pFrame );
 }
 
