@@ -53,6 +53,7 @@ private:
 	wo_fb_t *m_pLastFB = nullptr;
 	SDL_Surface *m_pOverlaySurface;
 	wo_rect_t m_OverlayRect = { 0, 0, 0, 0 };
+	Uint32 m_unOverlayCRC = 0;
 };
 
 #endif // VIDEO_DISPLAY_WAYLAND_H

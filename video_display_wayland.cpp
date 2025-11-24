@@ -161,6 +161,14 @@ void CVideoDisplayWayland::SetOverlayRect( const SDL_Rect &rect )
 //--------------------------------------------------------------------------------------------------
 void CVideoDisplayWayland::UpdateOverlay()
 {
+	// Check to see whether the overlay has changed
+	Uint32 unCRC = SDL_crc32(0, m_pOverlaySurface->pixels, m_pOverlaySurface->h * m_pOverlaySurface->pitch);
+	if ( unCRC == m_unOverlayCRC )
+	{
+		return;
+	}
+	m_unOverlayCRC = unCRC;
+
 	wo_fb_t *pFB = fb_pool_fb_new( m_pFramebufferPool, m_pOverlaySurface->w, m_pOverlaySurface->h, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR );
 	if ( !pFB )
 	{
