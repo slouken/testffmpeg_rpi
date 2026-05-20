@@ -31,7 +31,7 @@ OBJECTS := ${SOURCES:.c=.o}
 OBJECTS := ${OBJECTS:.cpp=.o}
 CFLAGS := -g -I. -Iexternal/hello_wayland/build -Iexternal/drmu -Iexternal/drmu/drmu -Iexternal/pollqueue -I/usr/include/libdrm
 CXXFLAGS := $(CFLAGS)
-LIBS := -lSDL3 -lavcodec -lavformat -lavutil -lwayland-client -lwayland-egl -lepoxy -lEGL -ldrm -lgbm
+LIBS := -lSDL3 -lavcodec -lavformat -lavutil -lwayland-client -lwayland-egl -lepoxy -lEGL -ldrm -lgbm -lz
 
 $(TARGET): $(OBJECTS)
 	$(CXX) -o $@ $^ $(LIBS)

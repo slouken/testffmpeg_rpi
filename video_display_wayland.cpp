@@ -13,6 +13,7 @@
 #include "video_display_rpi.h"
 
 #include <drm_fourcc.h>
+#include <zlib.h>
 
 //--------------------------------------------------------------------------------------------------
 // CVideoDisplayWayland event watcher
@@ -162,7 +163,7 @@ void CVideoDisplayWayland::SetOverlayRect( const SDL_Rect &rect )
 void CVideoDisplayWayland::UpdateOverlay()
 {
 	// Check to see whether the overlay has changed
-	Uint32 unCRC = SDL_crc32(0, m_pOverlaySurface->pixels, m_pOverlaySurface->h * m_pOverlaySurface->pitch);
+	Uint32 unCRC = crc32(0, (Uint8 *)m_pOverlaySurface->pixels, m_pOverlaySurface->h * m_pOverlaySurface->pitch);
 	if ( unCRC == m_unOverlayCRC )
 	{
 		return;
